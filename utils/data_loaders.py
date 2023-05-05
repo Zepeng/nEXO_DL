@@ -72,7 +72,8 @@ class DenseDataset(data.Dataset):
 
     def __getitem__(self, idx):
         dset_entry = self.h5file[self.groupname[idx]][self.datainfo[idx]]
-        eventtype = dset_entry.attrs[u'tag']
+        #eventtype = dset_entry.attrs[u'tag']
+        eventtype = 1 if dset_entry.attrs[u'tag']=='e-' else 0
         img = np.array(dset_entry)[:,:,:self.n_channels]
         img = np.transpose(img, (2,0,1)) #the initial image building put the layer index at axe 3.
         return torch.from_numpy(img).type(torch.FloatTensor), eventtype
@@ -144,11 +145,15 @@ class CathodeSimData(torch.utils.data.Dataset):
         z = np.array(dset_entry[:, 2]).astype(int)
         #img = np.zeros((20, 256, 256))
         #print(np.mean(dset_entry[:,3]), np.std(dset_entry[:,3]), np.max(dset_entry[:,3]))
-        img = np.random.normal(0, 2.75, size=(20, 256, 256))
+        avg_x = max(16, int(np.mean(x)))
+        avg_y = max(16, int(np.mean(y)))
+        img = np.zeros((20, 256, 256))
+        noise = np.random.normal(0, 2.75, size=(20, 32, 32))
+        img[:, avg_x - 16: avg_x+16, avg_y-16:avg_y+16] = noise
         for i, j, k, v in zip(x, y, z, dset_entry[:,3]):
-            img[k, i, j] = v*2
-        img[img<9.0] = 0
-        return torch.from_numpy(img).type(torch.FloatTensor), eventtype, dset_entry.attrs[u'energy']
+            img[k, i, j] = v
+        img[img<5.5] = 0
+        return torch.from_numpy(img[4:-4,:,:]).type(torch.FloatTensor), eventtype, dset_entry.attrs[u'energy']
 
     def __len__(self):
         return len(self.datainfo)
@@ -159,7 +164,8 @@ class CathodeSimData(torch.utils.data.Dataset):
             del self.csv_info
     
 def test():
-    dataset = CathodeSimData('/expanse/lustre/scratch/zli10/temp_project/cathodesim/nexo.csv', '/expanse/lustre/scratch/zli10/temp_project/cathodesim/nexo.h5')
+    dataset = DenseDataset('/expanse/lustre/scratch/zli10/temp_project/StripHdf5/nexo.csv', '/expanse/lustre/scratch/zli10/temp_project/StripHdf5/nexo.h5', 2)
+    #dataset = CathodeSimData('/expanse/lustre/scratch/zli10/temp_project/cathodesim/nexo.csv', '/expanse/lustre/scratch/zli10/temp_project/cathodesim/nexo.h5')
     for i in range(1900, 2100):
         print(i, np.count_nonzero(dataset[i][0]), dataset[i][1])
     #print(1, dataset[1][4].shape)

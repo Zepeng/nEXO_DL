@@ -188,13 +188,13 @@ if __name__ == "__main__":
         y_train_acc  = arrays_resumed[1]
         y_valid_loss = arrays_resumed[2]
         y_valid_acc  = arrays_resumed[3]
-        test_score   = arrays_resumed[4] #.tolist()
+        test_score   = arrays_resumed[4].tolist()
     else:
         y_train_loss = np.array([])
         y_train_acc  = np.array([])
         y_valid_loss = np.array([])
         y_valid_acc  = np.array([])
-        test_score   = np.array([])
+        test_score   = []
     
     for epoch in range(start_epoch, start_epoch + epochs):
         # Set the learning rate

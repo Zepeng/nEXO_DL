@@ -5,6 +5,7 @@
 #model code copied from https://github.com/DeepLearnPhysics/pytorch-uresnet
 
 import numpy as np
+import yaml
 from numpy import load
 import os
 
@@ -44,6 +45,11 @@ def adjust_learning_rate(optimizer, epoch, lr):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
+def yaml_load(config):
+    with open(config) as stream:
+        param = yaml.safe_load(stream)
+    return param
+
 # Training
 def train(trainloader, epoch):
     # print('\nEpoch: %d' % epoch)
@@ -52,7 +58,6 @@ def train(trainloader, epoch):
     correct = 0
     total = 0
     for batch_idx, (inputs, targets) in enumerate(trainloader):
-        # print(inputs.shape)
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
         outputs = net(inputs)
@@ -151,7 +156,7 @@ if __name__ == "__main__":
 
     # Data
     print('==> Preparing data..')
-    nEXODataset = DatasetFromSparseMatrix(h5file, fcsv, n_channels=input_shape[2])
+    nEXODataset = DenseDataset(h5file, fcsv, n_channels=input_shape[2])
     # Creating data indices for training and validation splits:
     dataset_size = len(nEXODataset)
     indices = list(range(dataset_size))

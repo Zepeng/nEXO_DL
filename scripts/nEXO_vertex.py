@@ -146,14 +146,14 @@ if __name__ == "__main__":
         print("Let's use ", torch.cuda.device_count(), " GPUs!")
         net = torch.nn.DataParallel(net, device_ids=list(range(torch.cuda.device_count())))
         
-    if args.resume and os.path.exists('./checkpoint_sens/ckpt.t7'):
+    if args.resume and os.path.exists('./checkpoint_sens/ckpt_49.t7'):
         # Load checkpoint.
         print('==> Resuming from checkpoint..')
         assert os.path.isdir('checkpoint_sens'), 'Error: no checkpoint directory found!'
         if device == 'cuda':
-            checkpoint = torch.load('./checkpoint_sens/ckpt.t7' )
+            checkpoint = torch.load('./checkpoint_sens/ckpt_49.t7' )
         else:
-            checkpoint = torch.load('./checkpoint_sens/ckpt.t7', map_location=torch.device('cpu') )
+            checkpoint = torch.load('./checkpoint_sens/ckpt_49.t7', map_location=torch.device('cpu') )
         net.load_state_dict(checkpoint['net'])
         valid_loss_min = checkpoint['loss']
         start_epoch = checkpoint['epoch'] + 1
@@ -163,11 +163,11 @@ if __name__ == "__main__":
         arrays_resumed = np.load('./training_outputs/loss_acc.npy', allow_pickle=True)
         y_train_loss = arrays_resumed[0]
         y_valid_loss = arrays_resumed[1]
-        test_score   = arrays_resumed[2] #.tolist()
+        test_score   = arrays_resumed[2].tolist()
     else:
         y_train_loss = np.array([])
         y_valid_loss = np.array([])
-        test_score   = np.array([])
+        test_score   = []
     
     for epoch in range(start_epoch, start_epoch + epochs):
         # Set the learning rate
@@ -200,7 +200,7 @@ if __name__ == "__main__":
                 
             print("Test[%d]: Result* Loss %.3f\t "%(epoch, valid_loss))
             
-            test_score = np.append(test_score, score)
+            test_score.append(score)
             y_valid_loss = np.append(y_valid_loss, valid_loss)
             
             np.save('./training_outputs/loss_acc.npy', np.array([y_train_loss, y_valid_loss, test_score], dtype=object))
