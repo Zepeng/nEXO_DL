@@ -76,7 +76,9 @@ class DenseDataset(data.Dataset):
         eventtype = 1 if dset_entry.attrs[u'tag']=='e-' else 0
         img = np.array(dset_entry)[:,:,:self.n_channels]
         img = np.transpose(img, (2,0,1)) #the initial image building put the layer index at axe 3.
-        return torch.from_numpy(img).type(torch.FloatTensor), eventtype
+        target = np.zeros((2, 255, 255)) #img = np.transpose(img, (2,0,1)) #the initial image building put the layer index at axe 3.
+        target[:, :200, :] = img #img = np.transpose(img, (2,0,1)) #the initial image building put the layer index at axe 3.
+        return torch.from_numpy(target).type(torch.FloatTensor), eventtype
 
 class VertexDataset(data.Dataset):
     def __init__(self, h5_path, csv_path, n_channels=2):
@@ -145,11 +147,11 @@ class CathodeSimData(torch.utils.data.Dataset):
         z = np.array(dset_entry[:, 2]).astype(int)
         #img = np.zeros((20, 256, 256))
         #print(np.mean(dset_entry[:,3]), np.std(dset_entry[:,3]), np.max(dset_entry[:,3]))
-        avg_x = max(16, int(np.mean(x)))
-        avg_y = max(16, int(np.mean(y)))
+        avg_x = max(9, int(np.mean(x)))
+        avg_y = max(9, int(np.mean(y)))
         img = np.zeros((20, 256, 256))
-        noise = np.random.normal(0, 2.75, size=(20, 32, 32))
-        img[:, avg_x - 16: avg_x+16, avg_y-16:avg_y+16] = noise
+        noise = np.random.normal(0, 2.75, size=(20, 18, 18))
+        img[:, avg_x - 9: avg_x+9, avg_y-9:avg_y+9] = noise
         for i, j, k, v in zip(x, y, z, dset_entry[:,3]):
             img[k, i, j] = v
         img[img<5.5] = 0

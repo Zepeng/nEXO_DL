@@ -22,10 +22,11 @@ from torch.optim import lr_scheduler
 
 import argparse
 #from networks.preact_resnet import PreActResNet18
-from networks.resnet_example import resnet18
+from networks.resnet_example import resnet14, resnet18
 from utils.data_loaders import DenseDataset
 from utils.data_loaders import DatasetFromSparseMatrix
 import traceback
+import networks.resnet as resnet
 
 if torch.cuda.is_available():
     device = 'cuda'
@@ -75,14 +76,14 @@ def train(trainloader, epoch):
     return train_loss/len(trainloader), 100.*correct/total
 
 def test(testloader, epoch, saveall=False):
-    
+
     global best_acc
     net.eval()
     test_loss = 0
     correct = 0
     total = 0
     score = []
-    
+
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(testloader):
             inputs, targets = inputs.to(device), targets.to(device)
@@ -103,7 +104,7 @@ def test(testloader, epoch, saveall=False):
     # Save checkpoint.
     is_better = False
     acc = 100.*correct/total
-    
+
     # If we want to save all training records
     if saveall:
         print ('Saving...')
@@ -134,7 +135,7 @@ def test(testloader, epoch, saveall=False):
         torch.save(state, './checkpoint_sens/ckpt_%d.t7' % epoch)
         torch.save(state, './checkpoint_sens/ckpt.t7' )
         best_acc = acc
-        
+
     return test_loss/len(testloader), 100.*correct/total, score
 
 
@@ -142,7 +143,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='PyTorch nEXO background rejection')
     parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
     parser.add_argument('--config', '-f', type=str, default="baseline.yml", help="specify yaml config")
-    
+
     args = parser.parse_args()
     # parameters
     config = yaml_load(args.config)
@@ -172,28 +173,29 @@ if __name__ == "__main__":
     # Creating PT data samplers and loaders:
     train_sampler = SubsetRandomSampler(train_indices)
     validation_sampler = SubsetRandomSampler(val_indices)
-    train_loader = torch.utils.data.DataLoader(nEXODataset, batch_size=batch_size, sampler=train_sampler, num_workers=0)
-    validation_loader = torch.utils.data.DataLoader(nEXODataset, batch_size=batch_size, sampler=validation_sampler, num_workers=0)
+    train_loader = torch.utils.data.DataLoader(nEXODataset, batch_size=batch_size, sampler=train_sampler, num_workers=8)
+    validation_loader = torch.utils.data.DataLoader(nEXODataset, batch_size=batch_size, sampler=validation_sampler, num_workers=8)
 
     start_epoch = 0
 
     print('==> Building model..')
     # net = preact_resnet.PreActResNet18(num_channels=args.channels)
+    #net = resnet.resnet18(num_classes=2, use_senet=True, ratio=16)
     net = resnet18(input_channels=input_shape[2])
     # Define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
     # We use SGD
     # optimizer = torch.optim.SGD(net.parameters(), lr, momentum=momentum, weight_decay=weight_decay)
     # optimizer = torch.optim.Adam(net.parameters(), lr=lr)
-    optimizer = torch.optim.AdamW(net.parameters(), lr=lr, betas=(0.9, 0.999), 
+    optimizer = torch.optim.AdamW(net.parameters(), lr=lr, betas=(0.9, 0.999),
                                   weight_decay=1e-4, eps=1e-08, amsgrad=False)
 
     net = net.to(device)
-    
+
     if torch.cuda.device_count() > 1:
         print("Let's use ", torch.cuda.device_count(), " GPUs!")
         net = torch.nn.DataParallel(net, device_ids=list(range(torch.cuda.device_count())))
-        
+
     if args.resume and os.path.exists('./checkpoint_sens/ckpt.t7'):
         # Load checkpoint.
         print('==> Resuming from checkpoint..')
@@ -205,7 +207,7 @@ if __name__ == "__main__":
         net.load_state_dict(checkpoint['net'])
         best_acc = checkpoint['acc']
         start_epoch = checkpoint['epoch'] + 1
-        
+
     # Numpy arrays for loss and accuracy, if resume from check point then read the previous results
     if args.resume and os.path.exists('./training_outputs/loss_acc.npy'):
         arrays_resumed = np.load('./training_outputs/loss_acc.npy', allow_pickle=True)
@@ -220,12 +222,12 @@ if __name__ == "__main__":
         y_valid_loss = np.array([])
         y_valid_acc  = np.array([])
         test_score   = []
-    
+
     for epoch in range(start_epoch, start_epoch + epochs):
         # Set the learning rate
         adjust_learning_rate(optimizer, epoch, lr)
         iterout = "\nEpoch [%d]: "%(epoch)
-        
+
         for param_group in optimizer.param_groups:
             iterout += "lr=%.3e"%(param_group['lr'])
             print(iterout)
@@ -243,18 +245,18 @@ if __name__ == "__main__":
 
             # Evaluate on validationset
             try:
-                valid_loss, prec1, score= test(validation_loader, epoch, args.save_all)
+                valid_loss, prec1, score= test(validation_loader, epoch, True)
             except Exception as e:
                 print("Error in validation routine!")
                 print(e.message)
                 print(e.__class__.__name__)
                 traceback.print_exc(e)
                 break
-                
+
             print("Test[%d]: Result* Loss %.3f\t Precision: %.3f"%(epoch, valid_loss, prec1))
-            
+
             test_score.append(score)
             y_valid_loss = np.append(y_valid_loss, valid_loss)
             y_valid_acc = np.append(y_valid_acc, prec1)
-            
+
             np.save('./training_outputs/loss_acc.npy', np.array([y_train_loss, y_train_acc, y_valid_loss, y_valid_acc, test_score], dtype=object))

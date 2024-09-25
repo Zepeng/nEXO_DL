@@ -6,6 +6,10 @@ import time
 import csv
 import argparse
 import pandas as pd
+from networks.resnet_example import resnet18
+import numpy as np
+import torch
+net = resnet18(input_channels=2)
 
 def h5merger(filedir, c_file, h5_file):
     filelist = glob.glob('%s/*.h5' % filedir)
@@ -13,18 +17,37 @@ def h5merger(filedir, c_file, h5_file):
     fieldnames = ['groupname', 'dsetname']
     writer = csv.DictWriter(csvfile, fieldnames)
     nsig = 0
+    nbkg = 0
     with h5py.File(h5_file, 'w') as fid:
         for i in range(len(filelist)):
             fileName = filelist[i]
             groupname = 'nexo_data'
-            print(fileName)
             f = h5py.File(fileName,  "r")
             f.copy(f[groupname], fid['/'], name='nexo_data_%d' % i)
             dset = f[groupname]
+            if 'bb0n' in fileName:
+                if nsig > 400000:
+                    continue
+                nsig += len(dset.keys())
+            else:
+                if nbkg > 400000:
+                    continue
+                nbkg += len(dset.keys())
+            print(nsig, nbkg, fileName)
             for item in dset.keys():
-                writer.writerow({'groupname':'nexo_data_%d' % i, 'dsetname':item})
+                img = np.array(dset[item])[:,:,:2]
+                if np.isnan(img).any() or np.isinf(img).any():
+                    print('NAN', item)
+                    continue
+                else:
+                #img = np.transpose(img, (2,0,1)) #the initial image building put the layer index at axe 3.
+                #target = np.zeros((1, 2, 255, 255)) #the initial image building put the layer index at axe 3.
+                #target[0,:, :200, :] = img #the initial image building put the layer index at axe 3.
+                #if not torch.isnan(net(torch.from_numpy(target).type(torch.FloatTensor)))[0,0].item():
+                    writer.writerow({'groupname':'nexo_data_%d' % i, 'dsetname':item})
             f.close()
-    csvfile.close() 
+    print('Signal:', nsig, 'Background:', nbkg)
+    csvfile.close()
     csv_info = pd.read_csv(c_file, header=None, delimiter=',')
     shuffled = csv_info.sample(frac=1).reset_index()
     n_train = int(len(shuffled)*0.8)
