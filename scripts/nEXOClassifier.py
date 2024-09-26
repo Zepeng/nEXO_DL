@@ -71,7 +71,8 @@ def train(trainloader, epoch):
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
 
-        print(batch_idx, '/', len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+        if batch_idx%100 == 0:
+            print(batch_idx, '/', len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
     return train_loss/len(trainloader), 100.*correct/total
 
@@ -98,7 +99,8 @@ def test(testloader, epoch, saveall=False):
             for m in range(outputs.size(0)):
                 score.append([softmax(outputs[m])[1].item(), targets[m].item()])
                 # score.append([outputs[m][1].item(), targets[m].item()])
-            print(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+            if batch_idx%100 == 0:
+                print(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
     # Save checkpoint.
@@ -147,6 +149,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     # parameters
     config = yaml_load(args.config)
+    model_name = config['model']['name'] 
     data_name = config['data']['name']
     h5file = config['data']['h5name']
     fcsv = config['data']['csv']
@@ -169,7 +172,6 @@ if __name__ == "__main__":
         np.random.seed(random_seed)
         np.random.shuffle(indices)
     train_indices, val_indices = indices[split:], indices[:split]
-
     # Creating PT data samplers and loaders:
     train_sampler = SubsetRandomSampler(train_indices)
     validation_sampler = SubsetRandomSampler(val_indices)
@@ -179,9 +181,15 @@ if __name__ == "__main__":
     start_epoch = 0
 
     print('==> Building model..')
-    # net = preact_resnet.PreActResNet18(num_channels=args.channels)
-    #net = resnet.resnet18(num_classes=2, use_senet=True, ratio=16)
-    net = resnet18(input_channels=input_shape[2])
+    if model_name == 'senet':
+        net = resnet.resnet18(num_classes=2, use_senet=True, ratio=16)
+    elif model_name == 'resnet18':
+        net = resnet18(input_channels=input_shape[2])
+    elif model_name == 'resnet14':
+        net = resnet14(input_channels=input_shape[2])
+    else:
+        print('Model {} not defined!'.format(model_name))
+        raise SystemExit()
     # Define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
     # We use SGD
@@ -245,17 +253,17 @@ if __name__ == "__main__":
 
             # Evaluate on validationset
             try:
-                valid_loss, prec1, score= test(validation_loader, epoch, True)
+                valid_loss, prec1, valid_score= test(validation_loader, epoch, True)
             except Exception as e:
                 print("Error in validation routine!")
                 print(e.message)
                 print(e.__class__.__name__)
                 traceback.print_exc(e)
                 break
-
             print("Test[%d]: Result* Loss %.3f\t Precision: %.3f"%(epoch, valid_loss, prec1))
 
-            test_score.append(score)
+
+            test_score.append(valid_score)
             y_valid_loss = np.append(y_valid_loss, valid_loss)
             y_valid_acc = np.append(y_valid_acc, prec1)
 
