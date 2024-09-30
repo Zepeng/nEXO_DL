@@ -156,7 +156,7 @@ class ResNet(nn.Module):
         self.use_senet = use_senet
         self.ratio = ratio
 
-        self.conv1 = nn.Conv2d(in_channels=2, out_channels=64, kernel_size=5, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(in_channels=2, out_channels=64, kernel_size=5, stride=2, padding=1, bias=False)
         self.bn = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxPool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -165,9 +165,11 @@ class ResNet(nn.Module):
         self.conv3 = self.get_layers(block, 128, self.layers[1], stride=2)
         self.conv4 = self.get_layers(block, 256, self.layers[2], stride=2)
         self.conv5 = self.get_layers(block, 512, self.layers[3], stride=2)
-        self.avgPool = nn.AdaptiveAvgPool2d((1, 1))
+        #self.avgPool = nn.AdaptiveAvgPool2d((1, 1))
+        self.avgPool = nn.AvgPool2d(7, stride=2)
+        self.dropout = nn.Dropout2d(p=0.5,inplace=True)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
-        torch.nn.init.kaiming_normal(self.fc.weight)
+        #torch.nn.init.kaiming_normal(self.fc.weight)
         for m in self.state_dict():
             if isinstance(m, nn.Conv2d):
                 torch.nn.init.kaiming_normal(m.weight, mode='fan_out', nonlinearity='relu')
@@ -206,6 +208,7 @@ class ResNet(nn.Module):
         x = self.conv5(x)
 
         x = self.avgPool(x)
+        x = self.dropout(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
         return x
