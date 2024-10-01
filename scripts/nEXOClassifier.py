@@ -6,23 +6,20 @@
 
 import numpy as np
 import yaml
-from numpy import load
-import os
 
 import torch
 import torch.nn as nn
-from torchvision import transforms
 from torch.utils.data.sampler import SubsetRandomSampler
 import os
 
 import torch.optim as optim
 import torch.nn.functional as F
-import torch.backends.cudnn as cudnn
 from torch.optim import lr_scheduler
+from torch.amp import autocast, GradScaler
 
 import argparse
-#from networks.preact_resnet import PreActResNet18
 from networks.resnet_example import resnet14, resnet18
+from networks.afnonet import AFNONet
 from utils.data_loaders import DenseDataset
 from utils.data_loaders import DatasetFromSparseMatrix
 import traceback
@@ -61,18 +58,21 @@ def train(trainloader, epoch):
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
-        outputs = net(inputs)
-        loss = criterion(outputs, targets)
-        loss.backward()
-        optimizer.step()
+        with autocast(device_type='cuda'):
+            outputs = net(inputs)
+            loss = criterion(outputs, targets)
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        #loss.backward()
+        #optimizer.step()
 
         train_loss += loss.item()
         _, predicted = outputs.max(1)
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
 
-        if batch_idx%100 == 0:
-            print(batch_idx, '/', len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+        print(batch_idx, '/', len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
     return train_loss/len(trainloader), 100.*correct/total
 
@@ -99,8 +99,7 @@ def test(testloader, epoch, saveall=False):
             for m in range(outputs.size(0)):
                 score.append([softmax(outputs[m])[1].item(), targets[m].item()])
                 # score.append([outputs[m][1].item(), targets[m].item()])
-            if batch_idx%100 == 0:
-                print(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+            print(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
     # Save checkpoint.
@@ -171,10 +170,11 @@ if __name__ == "__main__":
     if shuffle_dataset :
         np.random.seed(random_seed)
         np.random.shuffle(indices)
-    train_indices, val_indices = indices[split:], indices[:split]
+    train_indices, test_indices, val_indices = indices[split:], indices[:20000], indices[:split]
     # Creating PT data samplers and loaders:
     train_sampler = SubsetRandomSampler(train_indices)
     validation_sampler = SubsetRandomSampler(val_indices)
+    test_sampler = SubsetRandomSampler(test_indices)
     train_loader = torch.utils.data.DataLoader(nEXODataset, batch_size=batch_size, sampler=train_sampler, num_workers=8)
     validation_loader = torch.utils.data.DataLoader(nEXODataset, batch_size=batch_size, sampler=validation_sampler, num_workers=8)
 
@@ -187,6 +187,8 @@ if __name__ == "__main__":
         net = resnet18(input_channels=input_shape[2])
     elif model_name == 'resnet14':
         net = resnet14(input_channels=input_shape[2])
+    elif model_name == 'afno':
+        net = AFNONet(img_size=255, patch_size=4, in_chans=2, num_classes=2)
     else:
         print('Model {} not defined!'.format(model_name))
         raise SystemExit()
@@ -197,6 +199,7 @@ if __name__ == "__main__":
     # optimizer = torch.optim.Adam(net.parameters(), lr=lr)
     optimizer = torch.optim.AdamW(net.parameters(), lr=lr, betas=(0.9, 0.999),
                                   weight_decay=1e-4, eps=1e-08, amsgrad=False)
+    scaler = GradScaler(device='cuda')  # Initialize the GradScaler for mixed precision
 
     net = net.to(device)
 
@@ -260,8 +263,6 @@ if __name__ == "__main__":
                 print(e.__class__.__name__)
                 traceback.print_exc(e)
                 break
-            print("Test[%d]: Result* Loss %.3f\t Precision: %.3f"%(epoch, valid_loss, prec1))
-
 
             test_score.append(valid_score)
             y_valid_loss = np.append(y_valid_loss, valid_loss)

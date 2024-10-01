@@ -4,6 +4,7 @@ import torch, h5py
 import torch.utils.data as data
 from torchvision import transforms
 from scipy.sparse import csr_matrix
+import torch.nn.functional as F
 
 class SparseData(torch.utils.data.Dataset):
     def __init__(self, csv_path, h5path, nevents=None, augmentation = False):
@@ -76,9 +77,11 @@ class DenseDataset(data.Dataset):
         eventtype = 1 if dset_entry.attrs[u'tag']=='e-' else 0
         img = np.array(dset_entry)[:,:,:self.n_channels]
         img = np.transpose(img, (2,0,1)) #the initial image building put the layer index at axe 3.
-        target = np.zeros((2, 255, 255)) #img = np.transpose(img, (2,0,1)) #the initial image building put the layer index at axe 3.
-        target[:, :200, :] = img #img = np.transpose(img, (2,0,1)) #the initial image building put the layer index at axe 3.
-        return torch.from_numpy(target).type(torch.FloatTensor), eventtype
+        target = F.pad(torch.from_numpy(img).type(torch.FloatTensor), (0, 0, 0, 55), "constant", 0)
+        #target = np.zeros((2, 255, 255)) #img = np.transpose(img, (2,0,1)) #the initial image building put the layer index at axe 3.
+        #target[:, :200, :] = img #img = np.transpose(img, (2,0,1)) #the initial image building put the layer index at axe 3.
+        #return torch.from_numpy(target).type(torch.FloatTensor), eventtype
+        return target, eventtype
 
 class VertexDataset(data.Dataset):
     def __init__(self, h5_path, csv_path, n_channels=2):
